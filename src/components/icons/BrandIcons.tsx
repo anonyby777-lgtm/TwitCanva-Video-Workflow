@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Kling, Minimax } from '@lobehub/icons';
+import { Kling, Minimax, ByteDance } from '@lobehub/icons';
 
 interface IconProps {
     size?: number;
@@ -61,3 +61,10 @@ export const KlingIcon = Kling.Color;
  * Usage: <HailuoIcon size={14} /> for colored version
  */
 export const HailuoIcon = Minimax.Color;
+
+/**
+ * Seedance (ByteDance / Dreamina) Logo Icon
+ * Re-exported from @lobehub/icons for centralized brand icon access
+ * Usage: <SeedanceIcon size={14} /> for colored version
+ */
+export const SeedanceIcon = ByteDance.Color;

@@ -186,7 +186,7 @@ router.post('/generate-image', async (req, res) => {
 
 router.post('/generate-video', async (req, res) => {
     try {
-        const { nodeId, prompt, imageBase64: rawImageBase64, lastFrameBase64: rawLastFrameBase64, motionReferenceUrl: rawMotionReferenceUrl, aspectRatio, resolution, duration, videoModel } = req.body;
+        const { nodeId, prompt, imageBase64: rawImageBase64, lastFrameBase64: rawLastFrameBase64, motionReferenceUrl: rawMotionReferenceUrl, referenceImages: rawReferenceImages, aspectRatio, resolution, duration, videoModel } = req.body;
         const { GEMINI_API_KEY, KLING_ACCESS_KEY, KLING_SECRET_KEY, HAILUO_API_KEY, VIDEOS_DIR } = req.app.locals;
 
         // Resolve file URLs to base64
@@ -194,13 +194,56 @@ router.post('/generate-video', async (req, res) => {
         const lastFrameBase64 = resolveImageToBase64(rawLastFrameBase64);
         const motionReferenceUrl = resolveImageToBase64(rawMotionReferenceUrl);
 
+        // Resolve reference images (Seedance 2.5 reference-to-video)
+        const referenceImages = Array.isArray(rawReferenceImages)
+            ? rawReferenceImages.map(img => resolveImageToBase64(img)).filter(Boolean)
+            : null;
+
         // Determine provider
         const isKlingModel = videoModel && videoModel.startsWith('kling-');
         const isHailuoModel = videoModel && videoModel.startsWith('hailuo-');
+        const isSeedanceModel = videoModel && videoModel.startsWith('seedance-');
 
         let videoBuffer;
 
-        if (isKlingModel) {
+        if (isSeedanceModel) {
+            // --- SEEDANCE 2.5 VIDEO GENERATION (via Fal.ai) ---
+            const { FAL_API_KEY } = req.app.locals;
+
+            if (!FAL_API_KEY) {
+                return res.status(500).json({
+                    error: "FAL_API_KEY not configured. Add FAL_API_KEY to .env for Seedance 2.5."
+                });
+            }
+
+            console.log(`\n[Route] Seedance 2.5 generation`);
+            console.log(`[Route] Reference images: ${referenceImages ? referenceImages.length : 0}`);
+            console.log(`[Route] Start frame: ${imageBase64 ? 'YES' : 'NO'}, End frame: ${lastFrameBase64 ? 'YES' : 'NO'}`);
+            console.log(`[Route] Duration: ${duration || 'auto'}, Resolution: ${resolution || 'Auto'}, Aspect Ratio: ${aspectRatio || 'auto'}`);
+            console.log(`[Route] Generate Audio: ${req.body.generateAudio !== false}`);
+
+            const { generateSeedanceVideo } = await import('../services/fal.js');
+
+            const seedanceVideoUrl = await generateSeedanceVideo({
+                prompt,
+                imageBase64,
+                lastFrameBase64,
+                referenceImages,
+                resolution,
+                duration,
+                aspectRatio,
+                generateAudio: req.body.generateAudio !== false, // Default to true
+                apiKey: FAL_API_KEY
+            });
+
+            // Download from the result URL
+            const videoResponse = await fetch(seedanceVideoUrl);
+            if (!videoResponse.ok) {
+                throw new Error('Failed to download generated video from Seedance');
+            }
+            videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+
+        } else if (isKlingModel) {
             // --- KLING AI VIDEO GENERATION ---
 
             // Check if this is a Kling 2.6 model (route to Fal.ai - official API doesn't support v2.6)

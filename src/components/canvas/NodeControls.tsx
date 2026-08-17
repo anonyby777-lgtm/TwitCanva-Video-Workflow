@@ -9,7 +9,7 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Sparkles, Banana, Settings2, Check, ChevronDown, ChevronUp, GripVertical, Image as ImageIcon, Film, Clock, Expand, Shrink, Monitor, Crop, HardDrive } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
-import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
+import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon, SeedanceIcon } from '../icons/BrandIcons';
 import { useFaceDetection } from '../../hooks/useFaceDetection';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LocalModel, getLocalModels } from '../../services/localModelService';
@@ -55,6 +55,9 @@ const VIDEO_MODELS = [
     { id: 'kling-v2-1-master', name: 'Kling V2.1 Master', provider: 'kling', supportsTextToVideo: true, supportsImageToVideo: true, supportsMultiImage: true, durations: [5, 10], resolutions: ['Auto', '720p', '1080p'], aspectRatios: ['16:9', '9:16'] },
     { id: 'kling-v2-5-turbo', name: 'Kling V2.5 Turbo', provider: 'kling', supportsTextToVideo: true, supportsImageToVideo: true, supportsMultiImage: true, durations: [5, 10], resolutions: ['Auto', '720p', '1080p'], aspectRatios: ['16:9', '9:16'] },
     { id: 'kling-v2-6', name: 'Kling 2.6 (Motion)', provider: 'kling', supportsTextToVideo: true, supportsImageToVideo: true, supportsMultiImage: true, durations: [5, 10], resolutions: ['Auto', '720p', '1080p'], aspectRatios: ['16:9', '9:16'] },
+    // ByteDance Seedance 2.5 (via Fal.ai) - up to 30s single take, native audio + lip-synced speech
+    // Multiple image inputs are sent as reference images (reference-to-video) for character consistency
+    { id: 'seedance-2.5', name: 'Seedance 2.5', provider: 'seedance', supportsTextToVideo: true, supportsImageToVideo: true, supportsMultiImage: true, recommended: true, durations: [4, 5, 6, 8, 10, 12, 15, 20, 25, 30], resolutions: ['Auto', '480p', '720p'], aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] },
     // Hailuo AI (MiniMax) models - Note: API appears to only output 5s videos regardless of duration param
     { id: 'hailuo-2.3', name: 'Hailuo 2.3', provider: 'hailuo', supportsTextToVideo: true, supportsImageToVideo: true, supportsMultiImage: true, durations: [5], resolutions: ['768p', '1080p'], aspectRatios: ['16:9', '9:16'] },
     { id: 'hailuo-2.3-fast', name: 'Hailuo 2.3 Fast', provider: 'hailuo', supportsTextToVideo: false, supportsImageToVideo: true, supportsMultiImage: false, durations: [5], resolutions: ['768p', '1080p'], aspectRatios: ['16:9', '9:16'] },
@@ -723,6 +726,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <GoogleIcon size={12} className="text-white" />
                                     ) : currentVideoModel.provider === 'kling' ? (
                                         <KlingIcon size={14} />
+                                    ) : currentVideoModel.provider === 'seedance' ? (
+                                        <SeedanceIcon size={14} />
                                     ) : (
                                         <Film size={12} className="text-cyan-400" />
                                     )}
@@ -742,7 +747,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             {videoGenerationMode === 'text-to-video' ? 'Text → Video' :
                                                 videoGenerationMode === 'image-to-video' ? 'Image → Video' :
                                                     videoGenerationMode === 'motion-control' ? 'Motion Control' :
-                                                        'Frame-to-Frame'}
+                                                        currentVideoModel.provider === 'seedance' ? 'Reference → Video' :
+                                                            'Frame-to-Frame'}
                                         </div>
                                         {/* Google Models */}
                                         {availableVideoModels.filter(m => m.provider === 'google').length > 0 && (
@@ -786,6 +792,32 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <KlingIcon size={14} />
+                                                            {model.name}
+                                                            {model.recommended && (
+                                                                <span className="text-[9px] px-1 py-0.5 bg-green-600/30 text-green-400 rounded">REC</span>
+                                                            )}
+                                                        </span>
+                                                        {currentVideoModel.id === model.id && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+
+                                        {/* Seedance Models */}
+                                        {availableVideoModels.filter(m => m.provider === 'seedance').length > 0 && (
+                                            <>
+                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
+                                                    ByteDance
+                                                </div>
+                                                {availableVideoModels.filter(m => m.provider === 'seedance').map(model => (
+                                                    <button
+                                                        key={model.id}
+                                                        onClick={() => handleVideoModelChange(model.id)}
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                            }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <SeedanceIcon size={14} />
                                                             {model.name}
                                                             {model.recommended && (
                                                                 <span className="text-[9px] px-1 py-0.5 bg-green-600/30 text-green-400 rounded">REC</span>
@@ -1295,8 +1327,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         {/* Advanced Settings Content - Only for Video nodes */}
                         {showAdvanced && isVideoNode && (
                             <div className="mt-3 space-y-3">
-                                {/* Audio Toggle - Only for Kling 2.6 (Veo 3.1 SDK doesn't support generateAudio yet) */}
-                                {data.videoModel === 'kling-v2-6' && (
+                                {/* Audio Toggle - For Kling 2.6 and Seedance 2.5 (Veo 3.1 SDK doesn't support generateAudio yet) */}
+                                {(data.videoModel === 'kling-v2-6' || data.videoModel?.startsWith('seedance-')) && (
                                     <div className="inline-flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800/50 rounded-lg w-fit">
                                         <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />

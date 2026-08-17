@@ -27,9 +27,10 @@ export interface GenerateVideoParams {
   aspectRatio?: string;
   resolution?: string; // Add resolution to params
   duration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
-  videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
+  videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1', 'seedance-2.5')
   motionReferenceUrl?: string; // For Kling 2.6 motion control
-  generateAudio?: boolean; // For Kling 2.6 and Veo 3.1 native audio (default: true)
+  referenceImages?: string[]; // For Seedance 2.5 reference-to-video (character/style consistency)
+  generateAudio?: boolean; // For Kling 2.6, Veo 3.1 and Seedance 2.5 native audio (default: true)
   nodeId?: string; // ID of the node initiating generation
 }
 

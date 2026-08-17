@@ -19,7 +19,7 @@ A modern, AI-powered canvas application for generating and manipulating images a
 
 - **🎨 Visual Canvas Interface** - Drag-and-drop node-based workflow
 - **🤖 Multi-Model AI Generation** - GPT Image 1.5, Gemini Pro, Kling V1-V2.5 for images
-- **🎬 Multi-Model Video Generation** - Veo 3.1, Kling V1-V2.6, Hailuo 2.3/O2 for videos
+- **🎬 Multi-Model Video Generation** - Veo 3.1, Kling V1-V2.6, Hailuo 2.3/O2, Seedance 2.5 for videos
 - **🎥 Camera Angle Control** - Transform any image by adjusting camera rotation and tilt angles (Qwen-Image-Edit)
 - **📋 Storyboard** - Create video storyboards with consistent characters and layouts
 - **💃 Motion Control** - Transfer motion from reference videos to character images (Kling V2.6 via Fal.ai)
@@ -81,7 +81,7 @@ https://github.com/user-attachments/assets/3c36de54-d37e-4875-8403-5b6e4a6216e0
 - Hailuo AI API key (get one at [MiniMax Platform](https://platform.minimax.io/user-center/basic-information/interface-key))
 - OpenAI API key (get one at [OpenAI Platform](https://platform.openai.com/api-keys))
   - Requires [organization verification](https://platform.openai.com/settings/organization/general) to use GPT Image models
-- Fal.ai API key (get one at [Fal.ai Dashboard](https://fal.ai/dashboard/keys)) - Required for Kling V2.6 Motion Control
+- Fal.ai API key (get one at [Fal.ai Dashboard](https://fal.ai/dashboard/keys)) - Required for Kling V2.6 Motion Control and Seedance 2.5
 
 ### Installation
 
@@ -113,7 +113,7 @@ https://github.com/user-attachments/assets/3c36de54-d37e-4875-8403-5b6e4a6216e0
    # Get from https://platform.openai.com/api-keys
    OPENAI_API_KEY=your_openai_api_key_here
    
-   # Get from https://fal.ai/dashboard/keys (for Kling V2.6 Motion Control)
+   # Get from https://fal.ai/dashboard/keys (for Kling V2.6 Motion Control and Seedance 2.5)
    FAL_API_KEY=your_fal_api_key_here
    
    # Optional: X (Twitter) Post Feature - Get from https://developer.twitter.com/en/portal
@@ -454,6 +454,7 @@ Your API key is **never exposed** to the browser:
 | Hailuo 02 | MiniMax | ✅ | ✅ | ✅ |
 | Hailuo O2 | MiniMax | ✅ | ✅ | ❌ |
 | Kling V2.6 Motion | Fal.ai | ❌ | ✅ | Motion Control |
+| Seedance 2.5 | ByteDance (Fal.ai) | ✅ | ✅ | Reference-to-Video (up to 30s, native audio + lip-sync) |
 
 **Chat:**
 - **Gemini 2.0 Flash** - Chat conversations

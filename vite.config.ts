@@ -6,6 +6,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     server: {
+      host: true,
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: 'http://localhost:3001',

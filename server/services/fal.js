@@ -15,6 +15,11 @@ import sharp from 'sharp';
 const MOTION_CONTROL_MODEL = 'fal-ai/kling-video/v2.6/pro/motion-control';
 const IMAGE_TO_VIDEO_MODEL = 'fal-ai/kling-video/v2.6/pro/image-to-video';
 
+// Seedance 2.5 (ByteDance / Dreamina) endpoints on fal.ai
+const SEEDANCE_TEXT_TO_VIDEO_MODEL = 'bytedance/seedance-2.5/text-to-video';
+const SEEDANCE_IMAGE_TO_VIDEO_MODEL = 'bytedance/seedance-2.5/image-to-video';
+const SEEDANCE_REFERENCE_TO_VIDEO_MODEL = 'bytedance/seedance-2.5/reference-to-video';
+
 // Fal.ai upload limit is 10MB
 const MAX_FILE_SIZE = 9 * 1024 * 1024; // 9MB to be safe (under 10MB limit)
 
@@ -381,6 +386,193 @@ export async function generateFalImageToVideo({
     console.log('\n========================================');
     console.log('[Fal.ai Image-to-Video] SUCCESS!');
     console.log(`[Fal.ai Image-to-Video] Video URL: ${resultVideoUrl}`);
+    console.log('========================================\n');
+
+    return resultVideoUrl;
+}
+
+// ============================================================================
+// SEEDANCE 2.5 (ByteDance / Dreamina via Fal.ai)
+// ============================================================================
+
+/**
+ * Map an app resolution value to a Seedance-supported resolution.
+ * Seedance 2.5 supports 480p and 720p only.
+ */
+function mapSeedanceResolution(resolution) {
+    const res = (resolution || '').toLowerCase();
+    if (res === '480p') return '480p';
+    // 'auto', '720p', '768p', '1080p', '4k', '' → 720p (Seedance max)
+    return '720p';
+}
+
+/**
+ * Map an app duration value to a Seedance-supported duration.
+ * Seedance 2.5 supports 'auto' or integers from 4 to 30 seconds.
+ */
+function mapSeedanceDuration(duration) {
+    if (duration === undefined || duration === null || duration === 'auto') return 'auto';
+    const num = Math.round(Number(duration));
+    if (Number.isNaN(num)) return 'auto';
+    return String(Math.min(30, Math.max(4, num)));
+}
+
+/**
+ * Map an app aspect ratio to a Seedance-supported aspect ratio.
+ * Supported: auto, 21:9, 16:9, 4:3, 1:1, 3:4, 9:16
+ */
+function mapSeedanceAspectRatio(aspectRatio) {
+    const supported = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
+    return supported.includes(aspectRatio) ? aspectRatio : 'auto';
+}
+
+/**
+ * Generate video using Seedance 2.5 on Fal.ai.
+ *
+ * Automatically picks the right endpoint:
+ * - referenceImages (2+ images)  → reference-to-video (@Image1..@ImageN in prompt)
+ * - imageBase64 (start frame)    → image-to-video (+ optional end_image_url)
+ * - prompt only                  → text-to-video
+ *
+ * @param {Object} params
+ * @param {string} params.prompt - Text prompt (required by Seedance)
+ * @param {string} [params.imageBase64] - Start frame image (base64 data URI or raw base64)
+ * @param {string} [params.lastFrameBase64] - End frame image (image-to-video only)
+ * @param {string[]} [params.referenceImages] - Reference images for reference-to-video mode
+ * @param {string} [params.resolution] - 'Auto' | '480p' | '720p' | '1080p' (mapped to 480p/720p)
+ * @param {number|string} [params.duration] - 4-30 seconds or 'auto'
+ * @param {string} [params.aspectRatio] - e.g. '16:9' (text/reference modes only)
+ * @param {boolean} [params.generateAudio] - Synchronized audio incl. lip-synced speech (default true)
+ * @param {string} params.apiKey - Fal.ai API key
+ * @returns {Promise<string>} URL of the generated video
+ */
+export async function generateSeedanceVideo({
+    prompt,
+    imageBase64,
+    lastFrameBase64,
+    referenceImages,
+    resolution,
+    duration,
+    aspectRatio,
+    generateAudio = true,
+    apiKey
+}) {
+    if (!apiKey) {
+        throw new Error('[Fal.ai Seedance] FAL_API_KEY is required');
+    }
+    if (!prompt) {
+        throw new Error('[Fal.ai Seedance] A prompt is required for Seedance 2.5');
+    }
+
+    // Configure fal client with API key
+    fal.config({
+        credentials: apiKey
+    });
+
+    const hasReferences = Array.isArray(referenceImages) && referenceImages.length > 0;
+
+    // Decide endpoint
+    let endpoint;
+    if (hasReferences) {
+        endpoint = SEEDANCE_REFERENCE_TO_VIDEO_MODEL;
+    } else if (imageBase64) {
+        endpoint = SEEDANCE_IMAGE_TO_VIDEO_MODEL;
+    } else {
+        endpoint = SEEDANCE_TEXT_TO_VIDEO_MODEL;
+    }
+
+    console.log('\n========================================');
+    console.log('[Fal.ai Seedance 2.5] Starting generation');
+    console.log(`  - Endpoint: ${endpoint}`);
+    console.log(`  - Prompt: ${prompt.substring(0, 80)}...`);
+    console.log(`  - Reference images: ${hasReferences ? referenceImages.length : 0}`);
+    console.log(`  - Start frame: ${imageBase64 ? 'YES' : 'NO'}`);
+    console.log(`  - End frame: ${lastFrameBase64 ? 'YES' : 'NO'}`);
+    console.log(`  - Resolution: ${resolution || 'Auto'} → ${mapSeedanceResolution(resolution)}`);
+    console.log(`  - Duration: ${duration ?? 'auto'} → ${mapSeedanceDuration(duration)}`);
+    console.log(`  - Generate Audio: ${generateAudio}`);
+    console.log('========================================\n');
+
+    // Build input
+    const input = {
+        prompt,
+        resolution: mapSeedanceResolution(resolution),
+        duration: mapSeedanceDuration(duration),
+        generate_audio: generateAudio !== false
+    };
+
+    if (hasReferences) {
+        // --- REFERENCE-TO-VIDEO ---
+        console.log(`[Fal.ai Seedance] Uploading ${referenceImages.length} reference image(s)...`);
+        const uploads = await Promise.all(
+            referenceImages.map(async (img, idx) => {
+                const blob = await base64ToBlob(img, 'image');
+                const url = await fal.storage.upload(blob);
+                console.log(`[Fal.ai Seedance] Reference @Image${idx + 1} uploaded: ${url}`);
+                return url;
+            })
+        );
+        input.image_urls = uploads;
+        input.aspect_ratio = mapSeedanceAspectRatio(aspectRatio);
+    } else if (imageBase64) {
+        // --- IMAGE-TO-VIDEO ---
+        console.log('[Fal.ai Seedance] Uploading start frame...');
+        const startBlob = await base64ToBlob(imageBase64, 'image');
+        input.image_url = await fal.storage.upload(startBlob);
+        console.log(`[Fal.ai Seedance] Start frame uploaded: ${input.image_url}`);
+
+        if (lastFrameBase64) {
+            console.log('[Fal.ai Seedance] Uploading end frame...');
+            const endBlob = await base64ToBlob(lastFrameBase64, 'image');
+            input.end_image_url = await fal.storage.upload(endBlob);
+            console.log(`[Fal.ai Seedance] End frame uploaded: ${input.end_image_url}`);
+        }
+        // aspect_ratio is always "auto" for image-to-video (follows input image)
+        input.aspect_ratio = 'auto';
+    } else {
+        // --- TEXT-TO-VIDEO ---
+        input.aspect_ratio = mapSeedanceAspectRatio(aspectRatio);
+    }
+
+    console.log('[Fal.ai Seedance] Submitting request...');
+
+    // Track last status to avoid duplicate logs
+    let lastStatus = '';
+
+    let result;
+    try {
+        result = await fal.subscribe(endpoint, {
+            input,
+            logs: true,
+            onQueueUpdate: (update) => {
+                if (update.status !== lastStatus) {
+                    console.log(`[Fal.ai Seedance] Status: ${update.status}`);
+                    lastStatus = update.status;
+                }
+                if (update.status === 'IN_PROGRESS' && update.logs && update.logs.length > 0) {
+                    update.logs.map((log) => log.message).forEach(msg => {
+                        if (msg) console.log(`[Fal.ai Seedance Log] ${msg}`);
+                    });
+                }
+            }
+        });
+    } catch (falError) {
+        console.error('[Fal.ai Seedance] Error details:');
+        console.error('  Status:', falError.status);
+        console.error('  Body:', JSON.stringify(falError.body, null, 2));
+        console.error('  Request ID:', falError.requestId);
+        throw falError;
+    }
+
+    const resultVideoUrl = result.data?.video?.url;
+    if (!resultVideoUrl) {
+        console.log('[Fal.ai Seedance] Full result:', JSON.stringify(result, null, 2));
+        throw new Error('No video URL in Fal.ai Seedance result');
+    }
+
+    console.log('\n========================================');
+    console.log('[Fal.ai Seedance 2.5] SUCCESS!');
+    console.log(`[Fal.ai Seedance 2.5] Video URL: ${resultVideoUrl}`);
     console.log('========================================\n');
 
     return resultVideoUrl;
