@@ -71,6 +71,35 @@ export function resolveImageToBase64(input) {
         }
     }
 
+    // Bundled static asset served from the public/ directory (e.g. /assets/turminha/tico.png)
+    // Used by sample workflows that ship reference images with the repo.
+    if (filePath.startsWith('/') && !filePath.startsWith('//')) {
+        try {
+            const pathWithoutQuery = filePath.split('?')[0];
+            const publicDir = path.join(process.cwd(), 'public');
+            const absolutePath = path.resolve(publicDir, '.' + pathWithoutQuery);
+
+            // Prevent path traversal outside of public/
+            if (absolutePath.startsWith(publicDir) && fs.existsSync(absolutePath) && fs.statSync(absolutePath).isFile()) {
+                const fileBuffer = fs.readFileSync(absolutePath);
+                const ext = path.extname(absolutePath).toLowerCase();
+                const mimeType = {
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp',
+                    '.mp4': 'video/mp4',
+                    '.webm': 'video/webm'
+                }[ext] || 'image/png';
+
+                return `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+            }
+        } catch (error) {
+            console.error('Error resolving public asset to base64:', error);
+        }
+    }
+
     // If we couldn't resolve it, return null to prevent passing invalid data to API
     console.warn('Could not resolve image to base64:', input.substring(0, 100));
     return null;

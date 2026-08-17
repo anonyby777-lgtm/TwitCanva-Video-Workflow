@@ -230,12 +230,17 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 // Get first parent image for video generation (start frame)
                 let imageBase64: string | undefined;
                 let lastFrameBase64: string | undefined;
+                let referenceImages: string[] | undefined;
 
                 // Get non-TEXT parent nodes (image sources only)
                 const imageParentIds = node.parentIds?.filter(pid => {
                     const parent = nodes.find(n => n.id === pid);
                     return parent?.type !== NodeType.TEXT;
                 }) || [];
+
+                // Seedance 2.5: multiple image inputs become reference images
+                // (reference-to-video keeps characters/style consistent across shots)
+                const isSeedance = node.videoModel?.startsWith('seedance-') ?? false;
 
                 // Check for frame-to-frame mode (explicit or auto-detected from 2+ image parents)
                 const hasMultipleInputs = imageParentIds.length >= 2;
@@ -257,9 +262,29 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
                 // Only evaluate as frame-to-frame if NOT in motion control mode
-                const isFrameToFrame = !isMotionControl && (node.videoMode === 'frame-to-frame' || hasMultipleInputs || hasExplicitFrameInputs);
+                // Seedance with multiple inputs uses reference-to-video instead (unless the
+                // user explicitly assigned start/end frames via frameInputs)
+                const isFrameToFrame = !isMotionControl && (node.videoMode === 'frame-to-frame' || hasMultipleInputs || hasExplicitFrameInputs)
+                    && !(isSeedance && hasMultipleInputs && !hasExplicitFrameInputs && node.videoMode !== 'frame-to-frame');
 
-                if (isFrameToFrame && imageParentIds.length >= 2) {
+                if (isSeedance && hasMultipleInputs && !isFrameToFrame) {
+                    // --- SEEDANCE REFERENCE-TO-VIDEO ---
+                    // Send ALL image parents as reference images (@Image1, @Image2, ... in prompt order)
+                    referenceImages = [];
+                    for (const pid of imageParentIds) {
+                        const parent = nodes.find(n => n.id === pid);
+                        if (parent?.type === NodeType.VIDEO && parent.lastFrame) {
+                            referenceImages.push(parent.lastFrame);
+                        } else if (parent?.resultUrl) {
+                            referenceImages.push(parent.resultUrl);
+                        }
+                    }
+                    if (referenceImages.length === 1) {
+                        // Only one usable image → fall back to image-to-video
+                        imageBase64 = referenceImages[0];
+                        referenceImages = undefined;
+                    }
+                } else if (isFrameToFrame && imageParentIds.length >= 2) {
                     // Get start and end frames from frameInputs (if user reordered) or default order
                     const parent1 = nodes.find(n => n.id === imageParentIds[0]);
                     const parent2 = nodes.find(n => n.id === imageParentIds[1]);
@@ -318,6 +343,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     prompt: combinedPrompt,
                     imageBase64,
                     lastFrameBase64,
+                    referenceImages,
                     aspectRatio: node.aspectRatio,
                     resolution: node.resolution,
                     duration: node.videoDuration,

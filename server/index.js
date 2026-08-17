@@ -99,7 +99,7 @@ if (!OPENAI_API_KEY) {
 const FAL_API_KEY = process.env.FAL_API_KEY;
 
 if (!FAL_API_KEY) {
-    console.warn("SERVER WARNING: FAL_API_KEY not set. Kling 2.6 Motion Control will not work.");
+    console.warn("SERVER WARNING: FAL_API_KEY not set. Kling 2.6 Motion Control and Seedance 2.5 will not work.");
 }
 
 // Set up app.locals for sharing config with route modules
